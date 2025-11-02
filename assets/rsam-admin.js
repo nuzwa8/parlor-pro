@@ -1351,7 +1351,539 @@
 			// (wpAjax) (toast) (show) kar dega
 		}
 
-  
+  /**
+	 * Part 5 — Sales (POS) Screen
+	 * (Sales Ledger) (list) aur (New Sale) (form) (views) ko (handle) karta hai.
+	 */
+	function initSales() {
+		const tmpl = document.getElementById('rsam-tmpl-sales');
+		if (!tmpl) {
+			showError('Sales template not found.');
+			return;
+		}
+
+		// (Template) ko (mount) karein
+		const content = mountTemplate(tmpl);
+		state.ui.root.innerHTML = ''; // (Loading placeholder) ko (remove) karein
+		state.ui.root.appendChild(content);
+
+		// (UI Elements) ko (cache) karein
+		const ui = {
+			// (List View)
+			listView: state.ui.root.querySelector('#rsam-sales-list-view'),
+			tableBody: state.ui.root.querySelector('#rsam-sales-table-body'),
+			pagination: state.ui.root.querySelector('#rsam-sales-pagination'),
+			search: state.ui.root.querySelector('#rsam-sales-search'),
+			addNewBtn: state.ui.root.querySelector('#rsam-add-new-sale'),
+
+			// (Form View - POS)
+			formView: state.ui.root.querySelector('#rsam-sales-form-view'),
+			form: state.ui.root.querySelector('#rsam-sale-form'),
+			formTitle: state.ui.root.querySelector('#rsam-sale-form-title'),
+			backBtn: state.ui.root.querySelector('#rsam-back-to-sales-list'),
+			saveBtn: state.ui.root.querySelector('#rsam-save-sale-form'),
+			cancelBtn: state.ui.root.querySelector('#rsam-cancel-sale-form'),
+
+			// (POS Fields)
+			productSearch: state.ui.root.querySelector(
+				'#rsam-sale-product-search'
+			),
+			itemsTableBody: state.ui.root.querySelector(
+				'#rsam-sale-items-body'
+			),
+			customerSearch: state.ui.root.querySelector(
+				'#rsam-sale-customer'
+			),
+			quickAddCustomerBtn: state.ui.root.querySelector(
+				'.rsam-quick-add[data-type="customer"]'
+			),
+			stockAlert: state.ui.root.querySelector('#rsam-sale-stock-alert'),
+
+			// (Summary)
+			subtotalDisplay: state.ui.root.querySelector(
+				'#rsam-sale-subtotal'
+			),
+			discountField: state.ui.root.querySelector('#rsam-sale-discount'),
+			totalAmountDisplay: state.ui.root.querySelector(
+				'#rsam-sale-total-amount'
+			),
+			paymentStatus: state.ui.root.querySelector(
+				'#rsam-sale-payment-status'
+			),
+		};
+		// (UI) ko (state) mein (store) karein
+		state.ui.sales = ui;
+		// (Cart) (Items) ko (track) karne ke liye (array)
+		state.saleItems = [];
+
+		// (Initial) (Sales) (fetch) karein
+		fetchSales();
+
+		// (Event Listeners)
+		// (View Switching)
+		ui.addNewBtn.addEventListener('click', () => {
+			showSaleView('form');
+		});
+		ui.backBtn.addEventListener('click', () => {
+			showSaleView('list');
+		});
+		ui.cancelBtn.addEventListener('click', () => {
+			if (
+				state.saleItems.length === 0 ||
+				confirm('Are you sure you want to cancel this sale?')
+			) {
+				showSaleView('list');
+			}
+		});
+
+		// (List Search)
+		ui.search.addEventListener('keyup', (e) => {
+			clearTimeout(state.searchTimer);
+			state.searchTimer = setTimeout(() => {
+				state.currentSearch = e.target.value;
+				state.currentPage = 1;
+				fetchSales();
+			}, 500);
+		});
+
+		// (Form Handling)
+		setupProductAutocomplete(ui.productSearch, addProductToSale);
+		initCustomerSearch(ui.customerSearch, ui.quickAddCustomerBtn);
+
+		// (Costs) (Calculation)
+		ui.discountField.addEventListener('input', () => {
+			calculateSaleTotals();
+		});
+
+		// (Save Sale)
+		ui.saveBtn.addEventListener('click', (e) => {
+			e.preventDefault();
+			saveSale();
+		});
+
+		// (Unpaid) (sale) ke liye (customer) (check)
+		ui.paymentStatus.addEventListener('change', (e) => {
+			if (
+				e.target.value === 'unpaid' &&
+				parseInt(ui.customerSearch.value, 10) === 0
+			) {
+				showToast(
+					'Please select a customer for Unpaid (Khata) sales.',
+					'warning'
+				);
+				ui.customerSearch.focus();
+			}
+		});
+	}
+
+	/**
+	 * (Sales List) aur (Form) ke darmiyan (view) (switch) karta hai.
+	 * @param {'list'|'form'} view Dikhane wala (view)
+	 */
+	function showSaleView(view) {
+		const { listView, formView, form } = state.ui.sales;
+
+		if (view === 'form') {
+			listView.style.display = 'none';
+			formView.style.display = 'block';
+
+			// (Form) (Reset) karein
+			form.reset();
+			state.saleItems = [];
+			renderSaleItems();
+			calculateSaleTotals();
+			state.ui.sales.stockAlert.style.display = 'none';
+
+			// (Product search) par (focus) karein
+			state.ui.sales.productSearch.focus();
+		} else {
+			// (List) (View)
+			formView.style.display = 'none';
+			listView.style.display = 'block';
+		}
+	}
+
+	/**
+	 * (AJAX) ke zariye (Sales) (fetch) aur (render) karta hai.
+	 */
+	async function fetchSales() {
+		const { tableBody, pagination } = state.ui.sales;
+		if (!tableBody) return;
+
+		tableBody.innerHTML = `<tr>
+            <td colspan="7" class="rsam-list-loading">
+                <span class="rsam-loader-spinner"></span> ${rsamData.strings.loading}
+            </td>
+        </tr>`;
+
+		try {
+			const data = await wpAjax('rsam_get_sales', {
+				page: state.currentPage,
+				search: state.currentSearch,
+			});
+
+			renderSalesTable(data.sales);
+			renderPagination(
+				pagination,
+				data.pagination,
+				(newPage) => {
+					state.currentPage = newPage;
+					fetchSales();
+				}
+			);
+		} catch (error) {
+			showError(error, tableBody);
+		}
+	}
+
+	/**
+	 * (Sales) (data) ko (table) mein (render) karta hai.
+	 * @param {Array} sales (Sales) ka (array)
+	 */
+	function renderSalesTable(sales) {
+		const { tableBody } = state.ui.sales;
+		tableBody.innerHTML = '';
+
+		if (!sales || sales.length === 0) {
+			tableBody.innerHTML = `<tr>
+                <td colspan="7" class="rsam-list-empty">
+                    ${rsamData.strings.noItemsFound}
+                </td>
+            </tr>`;
+			return;
+		}
+
+		sales.forEach((sale) => {
+			const tr = document.createElement('tr');
+			tr.dataset.saleId = sale.id;
+			tr.innerHTML = `
+                <td>${escapeHtml(sale.id)}</td>
+                <td>${escapeHtml(sale.customer_name)}</td>
+                <td>${escapeHtml(sale.sale_date_formatted)}</td>
+                <td>${escapeHtml(sale.total_amount_formatted)}</td>
+                <td>${escapeHtml(sale.total_profit_formatted)}</td>
+                <td>
+                    <span class="rsam-status rsam-status-${escapeHtml(
+						sale.payment_status
+					)}">
+                        ${escapeHtml(sale.payment_status_label)}
+                    </span>
+                </td>
+                <td class="rsam-list-actions">
+                    <button type="button" class="button rsam-delete-btn" title="${rsamData.strings.delete}">
+                        <span class="dashicons dashicons-trash"></span>
+                    </button>
+                    </td>
+            `;
+
+			// (Delete) (Listener)
+			tr.querySelector('.rsam-delete-btn').addEventListener(
+				'click',
+				(e) => {
+					const row = e.target.closest('tr');
+					const saleId = row.dataset.saleId;
+					confirmDeleteSale(saleId);
+				}
+			);
+
+			tableBody.appendChild(tr);
+		});
+	}
+
+	/**
+	 * (Sale) ko (delete) karne ke liye (confirmation) (prompt) dikhata hai.
+	 * @param {string|number} saleId
+	 */
+	function confirmDeleteSale(saleId) {
+		const title = `${rsamData.strings.delete} Sale #${saleId}?`;
+		const message = `Are you sure you want to delete Sale #${saleId}? This will reverse the stock and (Khata) balance. This action cannot be undone.`;
+
+		openConfirmModal(title, message, async (e) => {
+			const deleteBtn = e.target;
+			try {
+				const result = await wpAjax(
+					'rsam_delete_sale',
+					{ sale_id: saleId },
+					deleteBtn
+				);
+				showToast(result.message, 'success');
+				closeConfirmModal();
+				fetchSales(); // (List) (refresh) karein
+			} catch (error) {
+				// (wpAjax) (toast) (show) kar dega
+				closeConfirmModal();
+			}
+		});
+	}
+
+	/**
+	 * (Customer) (Search) (Dropdown) ko (initialize) karta hai.
+	 */
+	function initCustomerSearch(selectEl, quickAddBtn) {
+		// (Yeh (Select2) ya (Choices.js) jesi (library) istemal kar sakta hai)
+		// (Filhal, hum (basic) (AJAX) (load) istemal karenge)
+
+		async function loadCustomers() {
+			try {
+				const data = await wpAjax('rsam_get_customers', {
+					limit: -1, // Tamam (customers)
+				});
+				selectEl.innerHTML =
+					'<option value="0">Walk-in Customer</option>';
+				data.customers.forEach((customer) => {
+					const option = document.createElement('option');
+					option.value = customer.id;
+					option.textContent = escapeHtml(customer.name);
+					selectEl.appendChild(option);
+				});
+			} catch (error) {
+				console.error('Failed to load customers:', error);
+			}
+		}
+
+		// (Quick Add) (Button)
+		quickAddBtn.addEventListener('click', () => {
+			// (Customer) (form) ko (modal) mein kholne ke liye (Part 12) ka (logic) (reuse) karein
+			if (window.rsamOpenCustomerForm) {
+				// (Callback) (function) (pass) karein
+				window.rsamOpenCustomerForm(null, (newCustomer) => {
+					// (Dropdown) mein naya (customer) (add) aur (select) karein
+					const option = document.createElement('option');
+					option.value = newCustomer.id;
+					option.textContent = escapeHtml(newCustomer.name);
+					option.selected = true;
+					selectEl.appendChild(option);
+				});
+			} else {
+				showToast(
+					'Error: Customer form function not found.',
+					'error'
+				);
+			}
+		});
+
+		loadCustomers(); // (Initial load)
+	}
+
+	/**
+	 * (Sale) (cart) mein (product) (add) karta hai.
+	 * @param {object} product (Product) (data) (autocomplete se)
+	 */
+	function addProductToSale(product) {
+		const { stockAlert } = state.ui.sales;
+		stockAlert.style.display = 'none'; // Purani (alert) (hide) karein
+
+		// (Stock check)
+		if (parseFloat(product.stock_quantity) <= 0) {
+			stockAlert.textContent = `Error: "${product.name}" is out of stock.`;
+			stockAlert.style.display = 'block';
+			return;
+		}
+
+		// Check karein ke (product) pehle se (list) mein to nahi
+		const existingItem = state.saleItems.find(
+			(item) => item.product_id === product.id
+		);
+
+		if (existingItem) {
+			// (Quantity) (increase) karein
+			const newQty = existingItem.quantity + 1;
+			// (Stock) (check)
+			if (newQty > parseFloat(product.stock_quantity)) {
+				stockAlert.textContent = `Error: Not enough stock for "${product.name}". Available: ${product.stock_quantity}.`;
+				stockAlert.style.display = 'block';
+				return;
+			}
+			existingItem.quantity = newQty;
+		} else {
+			// Naya (item) (state) mein (add) karein
+			state.saleItems.push({
+				product_id: product.id,
+				name: product.name,
+				unit_type: product.unit_type,
+				quantity: 1,
+				selling_price: parseFloat(product.selling_price),
+				max_stock: parseFloat(product.stock_quantity),
+			});
+		}
+
+		// (Table) (Re-render) karein
+		renderSaleItems();
+		calculateSaleTotals();
+	}
+
+	/**
+	 * (Sale form) mein (items) (cart) ko (render) karta hai.
+	 */
+	function renderSaleItems() {
+		const { itemsTableBody } = state.ui.sales;
+		itemsTableBody.innerHTML = ''; // (Clear) karein
+
+		if (state.saleItems.length === 0) {
+			itemsTableBody.innerHTML = `<tr class="rsam-no-items-row">
+                <td colspan="5">${rsamData.strings.cartEmpty || 'Cart is empty.'}</td>
+            </tr>`;
+			return;
+		}
+
+		state.saleItems.forEach((item, index) => {
+			const tr = document.createElement('tr');
+			tr.dataset.productId = item.product_id;
+			tr.dataset.index = index;
+
+			tr.innerHTML = `
+                <td>${escapeHtml(item.name)}</td>
+                <td>
+                    <input type="number" name="quantity" class="rsam-input-small" value="${escapeHtml(
+						item.quantity
+					)}" step="1" min="1" max="${escapeHtml(item.max_stock)}">
+                </td>
+                <td>
+                    <input type="number" name="selling_price" class="rsam-input-small" value="${escapeHtml(
+						item.selling_price
+					)}" step="0.01" min="0">
+                </td>
+                <td class="rsam-item-total">
+                    ${formatPrice(item.quantity * item.selling_price)}
+                </td>
+                <td>
+                    <button type="button" class="button rsam-delete-btn rsam-item-remove" title="${rsamData.strings.delete}">
+                        <span class="dashicons dashicons-no-alt"></span>
+                    </button>
+                </td>
+            `;
+
+			// (Input) (change) (listeners) (state) ko (update) karne ke liye
+			tr.querySelector('input[name="quantity"]').addEventListener(
+				'input',
+				(e) => {
+					const { stockAlert } = state.ui.sales;
+					stockAlert.style.display = 'none';
+					let newQty = parseFloat(e.target.value) || 0;
+
+					if (newQty > item.max_stock) {
+						newQty = item.max_stock;
+						e.target.value = newQty;
+						stockAlert.textContent = `Max stock available for "${item.name}" is ${item.max_stock}.`;
+						stockAlert.style.display = 'block';
+					}
+
+					state.saleItems[index].quantity = newQty;
+					calculateSaleTotals(); // (Totals) (re-calculate) karein
+					// (Row) (total) (update) karein
+					tr.querySelector('.rsam-item-total').textContent =
+						formatPrice(
+							newQty * state.saleItems[index].selling_price
+						);
+				}
+			);
+			tr.querySelector('input[name="selling_price"]').addEventListener(
+				'input',
+				(e) => {
+					const newPrice = parseFloat(e.target.value) || 0;
+					state.saleItems[index].selling_price = newPrice;
+					calculateSaleTotals();
+					tr.querySelector('.rsam-item-total').textContent =
+						formatPrice(
+							newPrice * state.saleItems[index].quantity
+						);
+				}
+			);
+
+			// (Remove) (button)
+			tr.querySelector('.rsam-item-remove').addEventListener(
+				'click',
+				() => {
+					state.saleItems.splice(index, 1); // (Array) se (remove) karein
+					renderSaleItems(); // (List) (re-render) karein
+					calculateSaleTotals();
+				}
+			);
+
+			itemsTableBody.appendChild(tr);
+		});
+	}
+
+	/**
+	 * (Sale form) mein (Subtotal) aur (Total Amount) (calculate) karta hai.
+	 */
+	function calculateSaleTotals() {
+		const { subtotalDisplay, discountField, totalAmountDisplay } =
+			state.ui.sales;
+
+		// (Items) (subtotal) (calculate) karein
+		const subtotal = state.saleItems.reduce((total, item) => {
+			return total + item.quantity * item.selling_price;
+		}, 0);
+
+		const discount = parseFloat(discountField.value) || 0;
+		const totalAmount = subtotal - discount;
+
+		subtotalDisplay.textContent = formatPrice(subtotal);
+		totalAmountDisplay.textContent = formatPrice(
+			totalAmount < 0 ? 0 : totalAmount
+		);
+	}
+
+	/**
+	 * Nayi (Sale) ko (AJAX) ke zariye (save) karta hai.
+	 */
+	async function saveSale() {
+		const { form, saveBtn, customerSearch, paymentStatus } = state.ui.sales;
+
+		if (state.saleItems.length === 0) {
+			showToast('Cart is empty. Please add products to sell.', 'error');
+			return;
+		}
+
+		const customerId = parseInt(customerSearch.value, 10) || 0;
+		const payStatus = paymentStatus.value;
+
+		if (payStatus === 'unpaid' && customerId === 0) {
+			showToast(
+				'Please select a customer to save an Unpaid (Khata) sale.',
+				'error'
+			);
+			customerSearch.focus();
+			return;
+		}
+
+		// (Form) (data) (object) banayein
+		const formData = new FormData(form);
+		const data = {};
+		// (Form) se (fields) (extract) karein
+		data.customer_id = customerId;
+		data.payment_status = payStatus;
+		data.notes = formData.get('notes');
+		data.discount_amount =
+			parseFloat(formData.get('discount_amount')) || 0;
+
+		// (Items) ko (JSON string) mein (convert) karein
+		// Sirf zaroori (data) bhejein
+		const itemsToSave = state.saleItems.map((item) => ({
+			product_id: item.product_id,
+			quantity: item.quantity,
+			selling_price: item.selling_price,
+		}));
+		data.items = JSON.stringify(itemsToSave);
+
+		try {
+			const result = await wpAjax('rsam_save_sale', data, saveBtn);
+			showToast(result.message, 'success');
+			showSaleView('list'); // (List) (view) par wapis jayein
+			fetchSales(); // (List) (refresh) karein
+			// (Future improvement): (Print receipt) (modal) dikhayein
+		} catch (error) {
+			// (wpAjax) (toast) (show) kar dega
+			// Agar (stock) ka (error) (backend) se aaye
+			if (error.includes('Insufficient stock')) {
+				state.ui.sales.stockAlert.textContent = error;
+				state.ui.sales.stockAlert.style.display = 'block';
+			}
+		}
+	}
+
+	/** Part 5 — Yahan khatam hua */
 
 	/** Part 1 — Yahan khatam hua */
 })(); // (IIFE) (close)
