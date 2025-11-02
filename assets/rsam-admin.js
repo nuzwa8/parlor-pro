@@ -2176,6 +2176,253 @@
 
 	/**
 	 * (Expense) ko (delete) karne ke liye (confirmation)
+/**
+	 * Part 7 — Employees Screen
+	 * (Employees) (template) ko (mount) karta hai, (list) (fetch) karta hai, aur (CRUD) (handle) karta hai.
+	 */
+	function initEmployees() {
+		const tmpl = document.getElementById('rsam-tmpl-employees');
+		if (!tmpl) {
+			showError('Employees template not found.');
+			return;
+		}
 
+		// (Template) ko (mount) karein
+		const content = mountTemplate(tmpl);
+		state.ui.root.innerHTML = ''; // (Loading placeholder) ko (remove) karein
+		state.ui.root.appendChild(content);
+
+		// (UI Elements) ko (cache) karein
+		const ui = {
+			tableBody: state.ui.root.querySelector(
+				'#rsam-employees-table-body'
+			),
+			pagination: state.ui.root.querySelector(
+				'#rsam-employees-pagination'
+			),
+			search: state.ui.root.querySelector('#rsam-employee-search'),
+			addNewBtn: state.ui.root.querySelector('#rsam-add-new-employee'),
+			formContainer: state.ui.root.querySelector(
+				'#rsam-employee-form-container'
+			),
+		};
+		// (UI) ko (state) mein (store) karein
+		state.ui.employees = ui;
+
+		// (Initial) (Employees) (fetch) karein
+		fetchEmployees();
+
+		// (Event Listeners)
+		// (Search)
+		ui.search.addEventListener('keyup', (e) => {
+			clearTimeout(state.searchTimer);
+			state.searchTimer = setTimeout(() => {
+				state.currentSearch = e.target.value;
+				state.currentPage = 1;
+				fetchEmployees();
+			}, 500);
+		});
+
+		// (Add New)
+		ui.addNewBtn.addEventListener('click', () => {
+			openEmployeeForm();
+		});
+	}
+
+	/**
+	 * (AJAX) ke zariye (Employees) (fetch) aur (render) karta hai.
+	 */
+	async function fetchEmployees() {
+		const { tableBody, pagination, search } = state.ui.employees;
+		if (!tableBody) return;
+
+		// (Loading) (state)
+		tableBody.innerHTML = `<tr>
+            <td colspan="6" class="rsam-list-loading">
+                <span class="rsam-loader-spinner"></span> ${rsamData.strings.loading}
+            </td>
+        </tr>`;
+
+		try {
+			const data = await wpAjax('rsam_get_employees', {
+				page: state.currentPage,
+				search: search.value,
+			});
+
+			// (Table) (render) karein
+			renderEmployeesTable(data.employees);
+			// (Pagination) (render) karein
+			renderPagination(
+				pagination,
+				data.pagination,
+				(newPage) => {
+					state.currentPage = newPage;
+					fetchEmployees();
+				}
+			);
+		} catch (error) {
+			showError(error, tableBody);
+		}
+	}
+
+	/**
+	 * (Employees) (data) ko (table) mein (render) karta hai.
+	 * @param {Array} employees (Employees) ka (array)
+	 */
+	function renderEmployeesTable(employees) {
+		const { tableBody } = state.ui.employees;
+		tableBody.innerHTML = ''; // (Clear) karein
+
+		if (!employees || employees.length === 0) {
+			tableBody.innerHTML = `<tr>
+                <td colspan="6" class="rsam-list-empty">
+                    ${rsamData.strings.noItemsFound}
+                </td>
+            </tr>`;
+			return;
+		}
+
+		employees.forEach((employee) => {
+			const tr = document.createElement('tr');
+			tr.dataset.employeeId = employee.id;
+			// (employee) (object) ko (element) par (store) karein (edit) ke liye
+			tr.dataset.employeeData = JSON.stringify(employee);
+
+			tr.innerHTML = `
+                <td>${escapeHtml(employee.name)}</td>
+                <td>${escapeHtml(employee.designation)}</td>
+                <td>${escapeHtml(employee.phone)}</td>
+                <td>${escapeHtml(employee.monthly_salary_formatted)}</td>
+                <td>
+                    <span class="rsam-status ${
+						Number(employee.is_active)
+							? 'rsam-status-active'
+							: 'rsam-status-inactive'
+					}">
+                        ${escapeHtml(employee.status_label)}
+                    </span>
+                </td>
+                <td class="rsam-list-actions">
+                    <button type="button" class="button rsam-edit-btn" title="${rsamData.strings.edit}">
+                        <span class="dashicons dashicons-edit"></span>
+                    </button>
+                    <button type="button" class="button rsam-delete-btn" title="${rsamData.strings.delete}">
+                        <span class="dashicons dashicons-trash"></span>
+                    </button>
+                </td>
+            `;
+
+			// (Action Listeners)
+			tr.querySelector('.rsam-edit-btn').addEventListener(
+				'click',
+				(e) => {
+					const row = e.target.closest('tr');
+					const data = JSON.parse(row.dataset.employeeData);
+					openEmployeeForm(data);
+				}
+			);
+
+			tr.querySelector('.rsam-delete-btn').addEventListener(
+				'click',
+				(e) => {
+					const row = e.target.closest('tr');
+					const employeeId = row.dataset.employeeId;
+					const employeeName = row.cells[0].textContent;
+					confirmDeleteEmployee(employeeId, employeeName);
+				}
+			);
+
+			tableBody.appendChild(tr);
+		});
+	}
+
+	/**
+	 * (Add/Edit) (Employee) (Form Modal) ko kholta hai.
+	 * @param {object} [employeeData] (Edit) ke liye (Employee) ka (data)
+	 */
+	function openEmployeeForm(employeeData = null) {
+		const { formContainer } = state.ui.employees;
+		const formHtml = formContainer.innerHTML; // (Form) (HTML) ko (template) se (copy) karein
+		const isEditing = employeeData !== null;
+
+		const title = isEditing
+			? `${rsamData.strings.edit} Employee`
+			: `${rsamData.strings.addNew} Employee`;
+
+		// (Modal) kholne ke baad (form) ko (populate) karein
+		openModal(title, formHtml, async (e) => {
+			// (Save callback)
+			const saveBtn = e.target;
+			const form =
+				state.ui.modal.body.querySelector('#rsam-employee-form');
+			if (form.checkValidity() === false) {
+				form.reportValidity();
+				return;
+			}
+
+			// (Form data) (serialize) karein
+			const formData = new URLSearchParams(new FormData(form)).toString();
+
+			try {
+				const result = await wpAjax(
+					'rsam_save_employee',
+					{ form_data: formData },
+					saveBtn
+				);
+				showToast(result.message, 'success');
+				closeModal();
+				fetchEmployees(); // (List) (refresh) karein
+			} catch (error) {
+				// (wpAjax) (toast) (show) kar dega
+			}
+		});
+
+		// (Modal) khulne ke baad (form) ko (populate) karein
+		if (isEditing) {
+			const form =
+				state.ui.modal.body.querySelector('#rsam-employee-form');
+			form.querySelector('[name="employee_id"]').value = employeeData.id;
+			form.querySelector('[name="name"]').value = employeeData.name;
+			form.querySelector('[name="designation"]').value =
+				employeeData.designation;
+			form.querySelector('[name="phone"]').value = employeeData.phone;
+			form.querySelector('[name="monthly_salary"]').value =
+				employeeData.monthly_salary;
+			form.querySelector('[name="joining_date"]').value =
+				employeeData.joining_date;
+			form.querySelector('[name="is_active"]').checked =
+				!!Number(employeeData.is_active);
+		}
+	}
+
+	/**
+	 * (Employee) ko (delete) karne ke liye (confirmation) (prompt) dikhata hai.
+	 * @param {string|number} employeeId
+	 * @param {string} employeeName
+	 */
+	function confirmDeleteEmployee(employeeId, employeeName) {
+		const title = `${rsamData.strings.delete} ${employeeName}?`;
+		const message = `Are you sure you want to delete "${employeeName}"? If this employee has salary records, deletion might fail.`;
+
+		openConfirmModal(title, message, async (e) => {
+			// (Delete callback)
+			const deleteBtn = e.target;
+			try {
+				const result = await wpAjax(
+					'rsam_delete_employee',
+					{ employee_id: employeeId },
+					deleteBtn
+				);
+				showToast(result.message, 'success');
+				closeConfirmModal();
+				fetchEmployees(); // (List) (refresh) karein
+			} catch (error) {
+				// (wpAjax) (toast) (show) kar dega
+				closeConfirmModal();
+			}
+		});
+	}
+
+	/** Part 7 — Yahan khatam hua */
 	/** Part 1 — Yahan khatam hua */
 })(); // (IIFE) (close)
