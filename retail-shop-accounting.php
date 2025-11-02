@@ -438,7 +438,7 @@ function rsam_admin_enqueue_scripts( $hook_suffix ) {
 	wp_enqueue_script(
 		'rsam-admin-script',
 		$plugin_url . 'assets/rsam-admin.js',
-		[ 'jquery' ], // (jQuery) par (depend) karta hai
+		[ 'jquery', 'jquery-ui-autocomplete' ], // (jQuery) aur (Autocomplete) par (depend) karta hai 
 		$version,
 		true // (Footer) mein load karein
 	);
