@@ -2678,7 +2678,761 @@
 
 	/** Part 8 — Yahan khatam hua */
 
+/**
+	 * Part 9 — Customers (Khata) Screen
+	 * (Customers) (template) ko (mount) karta hai, (list) (fetch) karta hai,
+	 * (CRUD) (handle) karta hai, aur (Payments) (record) karta hai.
+	 */
+	function initCustomers() {
+		const tmpl = document.getElementById('rsam-tmpl-customers');
+		if (!tmpl) {
+			showError('Customers template not found.');
+			return;
+		}
 
+		// (Template) ko (mount) karein
+		const content = mountTemplate(tmpl);
+		state.ui.root.innerHTML = ''; // (Loading placeholder) ko (remove) karein
+		state.ui.root.appendChild(content);
+
+		// (UI Elements) ko (cache) karein
+		const ui = {
+			tableBody: state.ui.root.querySelector(
+				'#rsam-customers-table-body'
+			),
+			pagination: state.ui.root.querySelector(
+				'#rsam-customers-pagination'
+			),
+			search: state.ui.root.querySelector('#rsam-customer-search'),
+			addNewBtn: state.ui.root.querySelector('#rsam-add-new-customer'),
+			formContainer: state.ui.root.querySelector(
+				'#rsam-customer-form-container'
+			),
+			paymentFormContainer: state.ui.root.querySelector(
+				'#rsam-customer-payment-form-container'
+			),
+		};
+		// (UI) ko (state) mein (store) karein
+		state.ui.customers = ui;
+
+		// (Initial) (Customers) (fetch) karein
+		fetchCustomers();
+
+		// (Event Listeners)
+		// (Search)
+		ui.search.addEventListener('keyup', (e) => {
+			clearTimeout(state.searchTimer);
+			state.searchTimer = setTimeout(() => {
+				state.currentSearch = e.target.value;
+				state.currentPage = 1;
+				fetchCustomers();
+			}, 500);
+		});
+
+		// (Add New)
+		ui.addNewBtn.addEventListener('click', () => {
+			// (Callback) (function) (pass) karein (list) ko (refresh) karne ke liye
+			openCustomerForm(null, () => {
+				fetchCustomers();
+			});
+		});
+	}
+
+	/**
+	 * (AJAX) ke zariye (Customers) (fetch) aur (render) karta hai.
+	 */
+	async function fetchCustomers() {
+		const { tableBody, pagination, search } = state.ui.customers;
+		if (!tableBody) return;
+
+		// (Loading) (state)
+		tableBody.innerHTML = `<tr>
+            <td colspan="4" class="rsam-list-loading">
+                <span class="rsam-loader-spinner"></span> ${rsamData.strings.loading}
+            </td>
+        </tr>`;
+
+		try {
+			const data = await wpAjax('rsam_get_customers', {
+				page: state.currentPage,
+				search: search.value,
+			});
+
+			// (Table) (render) karein
+			renderCustomersTable(data.customers);
+			// (Pagination) (render) karein
+			renderPagination(
+				pagination,
+				data.pagination,
+				(newPage) => {
+					state.currentPage = newPage;
+					fetchCustomers();
+				}
+			);
+		} catch (error) {
+			showError(error, tableBody);
+		}
+	}
+
+	/**
+	 * (Customers) (data) ko (table) mein (render) karta hai.
+	 * @param {Array} customers (Customers) ka (array)
+	 */
+	function renderCustomersTable(customers) {
+		const { tableBody } = state.ui.customers;
+		tableBody.innerHTML = ''; // (Clear) karein
+
+		if (!customers || customers.length === 0) {
+			tableBody.innerHTML = `<tr>
+                <td colspan="4" class="rsam-list-empty">
+                    ${rsamData.strings.noItemsFound}
+                </td>
+            </tr>`;
+			return;
+		}
+
+		customers.forEach((customer) => {
+			const tr = document.createElement('tr');
+			tr.dataset.customerId = customer.id;
+			// (customer) (object) ko (element) par (store) karein (edit) ke liye
+			tr.dataset.customerData = JSON.stringify(customer);
+
+			tr.innerHTML = `
+                <td>${escapeHtml(customer.name)}</td>
+                <td>${escapeHtml(customer.phone)}</td>
+                <td>${escapeHtml(customer.credit_balance_formatted)}</td>
+                <td class="rsam-list-actions">
+                    <button type="button" class="button button-primary rsam-payment-btn" title="${rsamData.strings.recordPayment || 'Record Payment'}">
+                        <span class="dashicons dashicons-money-alt"></span>
+                    </button>
+                    <button type="button" class="button rsam-edit-btn" title="${rsamData.strings.edit}">
+                        <span class="dashicons dashicons-edit"></span>
+                    </button>
+                    <button type="button" class="button rsam-delete-btn" title="${rsamData.strings.delete}">
+                        <span class="dashicons dashicons-trash"></span>
+                    </button>
+                </td>
+            `;
+
+			// (Action Listeners)
+			tr.querySelector('.rsam-payment-btn').addEventListener(
+				'click',
+				(e) => {
+					const row = e.target.closest('tr');
+					const data = JSON.parse(row.dataset.customerData);
+					openCustomerPaymentForm(data);
+				}
+			);
+
+			tr.querySelector('.rsam-edit-btn').addEventListener(
+				'click',
+				(e) => {
+					const row = e.target.closest('tr');
+					const data = JSON.parse(row.dataset.customerData);
+					// (List) (refresh) (callback)
+					openCustomerForm(data, () => {
+						fetchCustomers();
+					});
+				}
+			);
+
+			tr.querySelector('.rsam-delete-btn').addEventListener(
+				'click',
+				(e) => {
+					const row = e.target.closest('tr');
+					const customerId = row.dataset.customerId;
+					const customerName = row.cells[0].textContent;
+					confirmDeleteCustomer(customerId, customerName);
+				}
+			);
+
+			tableBody.appendChild(tr);
+		});
+	}
+
+	/**
+	 * (Add/Edit) (Customer) (Form Modal) ko kholta hai.
+	 * (Isey (global) (window object) par (attach) karein taake (Sales) screen isey (call) kar sake)
+	 * @param {object} [customerData] (Edit) ke liye (Customer) ka (data)
+	 * @param {function} [onSaveCallback] (Save) hone ke baad (callback)
+	 */
+	function openCustomerForm(customerData = null, onSaveCallback = null) {
+		const formContainer = document.getElementById(
+			'rsam-customer-form-container'
+		);
+		if (!formContainer) {
+			showToast('Customer form template not found.', 'error');
+			return;
+		}
+
+		const formHtml = formContainer.innerHTML;
+		const isEditing = customerData !== null;
+
+		const title = isEditing
+			? `${rsamData.strings.edit} Customer`
+			: `${rsamData.strings.addNew} Customer`;
+
+		openModal(title, formHtml, async (e) => {
+			// (Save callback)
+			const saveBtn = e.target;
+			const form =
+				state.ui.modal.body.querySelector('#rsam-customer-form');
+			if (form.checkValidity() === false) {
+				form.reportValidity();
+				return;
+			}
+
+			const formData = new URLSearchParams(new FormData(form)).toString();
+
+			try {
+				const result = await wpAjax(
+					'rsam_save_customer',
+					{ form_data: formData },
+					saveBtn
+				);
+				showToast(result.message, 'success');
+				closeModal();
+				// (Callback) (run) karein (agar (defined) hai)
+				if (onSaveCallback) {
+					onSaveCallback(result.customer); // (Naya/updated) (customer object) (pass) karein
+				}
+			} catch (error) {
+				// (wpAjax) (toast) (show) kar dega
+			}
+		});
+
+		// (Modal) khulne ke baad (form) ko (populate) karein
+		if (isEditing) {
+			const form =
+				state.ui.modal.body.querySelector('#rsam-customer-form');
+			form.querySelector('[name="customer_id"]').value = customerData.id;
+			form.querySelector('[name="name"]').value = customerData.name;
+			form.querySelector('[name="phone"]').value = customerData.phone;
+			form.querySelector('[name="address"]').value = customerData.address;
+		}
+	}
+	// (Global) (function) (expose) karein (Sales) (screen) ke liye
+	window.rsamOpenCustomerForm = openCustomerForm;
+
+	/**
+	 * (Customer) ko (delete) karne ke liye (confirmation) (prompt) dikhata hai.
+	 * @param {string|number} customerId
+	 * @param {string} customerName
+	 */
+	function confirmDeleteCustomer(customerId, customerName) {
+		const title = `${rsamData.strings.delete} ${customerName}?`;
+		const message = `Are you sure you want to delete "${customerName}"? If this customer has a balance or sales history, deletion will fail.`;
+
+		openConfirmModal(title, message, async (e) => {
+			// (Delete callback)
+			const deleteBtn = e.target;
+			try {
+				const result = await wpAjax(
+					'rsam_delete_customer',
+					{ customer_id: customerId },
+					deleteBtn
+				);
+				showToast(result.message, 'success');
+				closeConfirmModal();
+				fetchCustomers(); // (List) (refresh) karein
+			} catch (error) {
+				// (wpAjax) (toast) (show) kar dega
+				closeConfirmModal();
+			}
+		});
+	}
+
+	/**
+	 * (Customer Payment) (Form Modal) ko kholta hai.
+	 * @param {object} customerData (Customer) ka (data)
+	 */
+	function openCustomerPaymentForm(customerData) {
+		const { paymentFormContainer } = state.ui.customers;
+		const formHtml = paymentFormContainer.innerHTML;
+		const title =
+			`${rsamData.strings.recordPayment || 'Record Payment'} for ${customerData.name}`;
+
+		openModal(title, formHtml, async (e) => {
+			// (Save callback)
+			const saveBtn = e.target;
+			const form = state.ui.modal.body.querySelector(
+				'#rsam-customer-payment-form'
+			);
+			if (form.checkValidity() === false) {
+				form.reportValidity();
+				return;
+			}
+
+			const formData = new URLSearchParams(new FormData(form)).toString();
+
+			try {
+				const result = await wpAjax(
+					'rsam_record_customer_payment',
+					{ form_data: formData },
+					saveBtn
+				);
+				showToast(result.message, 'success');
+				closeModal();
+				fetchCustomers(); // (List) (refresh) karein
+			} catch (error) {
+				// (wpAjax) (toast) (show) kar dega
+			}
+		});
+
+		// (Modal) (form) ko (populate) karein
+		const form = state.ui.modal.body.querySelector(
+			'#rsam-customer-payment-form'
+		);
+		form.querySelector('[name="customer_id"]').value = customerData.id;
+		form.querySelector(
+			'.rsam-payment-customer-name'
+		).textContent = `Customer: ${customerData.name}`;
+		form.querySelector(
+			'.rsam-payment-current-balance'
+		).textContent = `Current Dues: ${customerData.credit_balance_formatted}`;
+
+		// (Amount) (field) mein (balance) (default) daal dein (agar 0 se zyada hai)
+		const amountInput = form.querySelector('#rsam-payment-amount');
+		const balance = parseFloat(customerData.credit_balance);
+		if (balance > 0) {
+			amountInput.value = balance;
+			amountInput.max = balance;
+		}
+
+		// (Payment date) (today) (set) karein
+		form.querySelector('#rsam-payment-date').value =
+			new Date().toISOString().split('T')[0];
+	}
+
+	/** Part 9 — Yahan khatam hua */
+
+		/**
+	 * Part 10 — Reports Screen
+	 * (Reports) (form) ko (handle) karta hai aur (results) ko (render) karta hai.
+	 */
+	function initReports() {
+		const tmpl = document.getElementById('rsam-tmpl-reports');
+		if (!tmpl) {
+			showError('Reports template not found.');
+			return;
+		}
+
+		// (Template) ko (mount) karein
+		const content = mountTemplate(tmpl);
+		state.ui.root.innerHTML = ''; // (Loading placeholder) ko (remove) karein
+		state.ui.root.appendChild(content);
+
+		// (UI Elements) ko (cache) karein
+		const ui = {
+			form: state.ui.root.querySelector('#rsam-report-form'),
+			reportType: state.ui.root.querySelector('#rsam-report-type'),
+			customerField: state.ui.root.querySelector(
+				'#rsam-report-customer-field'
+			),
+			customerSelect: state.ui.root.querySelector(
+				'#rsam-report-customer-id'
+			),
+			generateBtn: state.ui.root.querySelector(
+				'#rsam-generate-report'
+			),
+			resultsWrapper: state.ui.root.querySelector(
+				'#rsam-report-results-wrapper'
+			),
+		};
+		// (UI) ko (state) mein (store) karein
+		state.ui.reports = ui;
+
+		// (Event Listeners)
+		// (Form) (Submit)
+		ui.form.addEventListener('submit', (e) => {
+			e.preventDefault();
+			handleReportGeneration();
+		});
+
+		// (Report Type) (Change)
+		ui.reportType.addEventListener('change', (e) => {
+			if (e.target.value === 'customer_ledger') {
+				ui.customerField.style.display = 'block';
+				// (Customer) (dropdown) ko (init) karein (agar nahi hua)
+				if (!ui.customerSelect.dataset.initialized) {
+					initCustomerSearch(ui.customerSelect, null); // (Quick add) (button) nahi hai
+					ui.customerSelect.dataset.initialized = 'true';
+				}
+			} else {
+				ui.customerField.style.display = 'none';
+			}
+		});
+
+		// (Default) (dates) (set) karein (Mahnay ka start aur end)
+		const today = new Date();
+		const monthStart = new Date(
+			today.getFullYear(),
+			today.getMonth(),
+			1
+		)
+			.toISOString()
+			.split('T')[0];
+		const monthEnd = today.toISOString().split('T')[0];
+		ui.form.querySelector('[name="start_date"]').value = monthStart;
+		ui.form.querySelector('[name="end_date"]').value = monthEnd;
+	}
+
+	/**
+	 * (Report) (generation) (AJAX) (request) ko (handle) karta hai.
+	 */
+	async function handleReportGeneration() {
+		const { form, generateBtn, resultsWrapper } = state.ui.reports;
+
+		if (form.checkValidity() === false) {
+			form.reportValidity();
+			return;
+		}
+
+		// (Form) (data) (serialize) karein
+		const formData = new FormData(form);
+		const data = {};
+		formData.forEach((value, key) => (data[key] = value));
+
+		// (Loading) (state)
+		resultsWrapper.innerHTML = `<div class="rsam-card rsam-list-loading">
+            <p><span class="rsam-loader-spinner"></span> Generating report...</p>
+        </div>`;
+
+		try {
+			const result = await wpAjax(
+				'rsam_generate_report',
+				data,
+				generateBtn
+			);
+			renderReportResults(result); // (Results) (render) karein
+		} catch (error) {
+			showError(error, resultsWrapper);
+		}
+	}
+
+	/**
+	 * (AJAX) (response) ke hisab se (report) ko (render) karta hai.
+	 * @param {object} data (Report data)
+	 */
+	function renderReportResults(data) {
+		const { resultsWrapper } = state.ui.reports;
+		resultsWrapper.innerHTML = ''; // (Clear) karein
+
+		let html = `<div class="rsam-card rsam-report-results">`;
+		html += `<div class="rsam-report-header">
+            <h3>Report: ${escapeHtml(
+				data.report_type.toUpperCase()
+			)}</h3>
+            <p>Date Range: ${escapeHtml(
+				data.start_date
+			)} to ${escapeHtml(data.end_date)}</p>
+        </div>`;
+
+		switch (data.report_type) {
+			case 'pnl':
+				html += renderPnlReport(data.pnl);
+				break;
+			case 'sales':
+				html += renderSalesReport(data);
+				break;
+			case 'expenses':
+				html += renderExpensesReport(data.expenses_summary);
+				break;
+			case 'stock':
+				html += renderStockReport(data.stock_summary);
+				break;
+			case 'customer_ledger':
+				html += renderCustomerLedger(data.customer_ledger);
+				break;
+			default:
+				html += `<p>Error: Unknown report type rendered.</p>`;
+		}
+
+		html += `</div>`;
+		resultsWrapper.innerHTML = html;
+	}
+
+	// --- (Report) (Render) (Helpers) ---
+
+	/**
+	 * (Profit & Loss) (Report) (HTML)
+	 */
+	function renderPnlReport(pnl) {
+		let html = `<h4>${rsamData.strings.pnlStatement || 'Profit & Loss Statement'}</h4>
+        <div class="rsam-pnl-summary">
+            <div class="rsam-summary-row">
+                <span>Total Sales (Revenue)</span>
+                <span class="rsam-price-positive">${formatPrice(
+					pnl.total_sales
+				)}</span>
+            </div>
+            <div class="rsam-summary-row">
+                <span>Cost of Goods Sold (COGS)</span>
+                <span class="rsam-price-negative">(${formatPrice(
+					pnl.total_cogs
+				)})</span>
+            </div>
+            <div class="rsam-summary-row rsam-summary-total">
+                <strong>Gross Profit</strong>
+                <strong>${formatPrice(pnl.gross_profit)}</strong>
+            </div>
+            
+            <hr>
+            <h5>Operating Expenses</h5>
+        `;
+
+		// (Expense Breakdown)
+		if (pnl.expense_breakdown && pnl.expense_breakdown.length > 0) {
+			pnl.expense_breakdown.forEach((exp) => {
+				html += `<div class="rsam-summary-row">
+                    <span>Expense: ${escapeHtml(exp.category)}</span>
+                    <span class="rsam-price-negative">(${formatPrice(
+						exp.total
+					)})</span>
+                </div>`;
+			});
+		} else {
+			html += `<div class="rsam-summary-row"><span>No operating expenses recorded.</span><span>${formatPrice(
+				0
+			)}</span></div>`;
+		}
+
+		html += `<div class="rsam-summary-row rsam-summary-total">
+                <strong>Total Operating Expenses</strong>
+                <strong class="rsam-price-negative">(${formatPrice(
+					pnl.total_expenses
+				)})</strong>
+            </div>
+            <hr>
+            <div class="rsam-summary-row rsam-summary-final ${
+				pnl.net_profit >= 0
+					? 'rsam-price-positive'
+					: 'rsam-price-negative'
+			}">
+                <strong>Net Profit / (Loss)</strong>
+                <strong>${formatPrice(pnl.net_profit)}</strong>
+            </div>
+        </div>`;
+		return html;
+	}
+
+	/**
+	 * (Sales Summary) (Report) (HTML)
+	 */
+	function renderSalesReport(data) {
+		const summary = data.sales_summary;
+		let html = `<h4>${rsamData.strings.salesSummary || 'Sales Summary'}</h4>
+        <div class="rsam-stats-grid rsam-stats-grid-4col">
+            <div class="rsam-stat-item">
+                <strong>Total Sales</strong>
+                <span>${formatPrice(summary.total_sales)}</span>
+            </div>
+            <div class="rsam-stat-item">
+                <strong>Total Profit</strong>
+                <span>${formatPrice(summary.total_profit)}</span>
+            </div>
+            <div class="rsam-stat-item">
+                <strong>Total Transactions</strong>
+                <span>${escapeHtml(summary.total_transactions)}</span>
+            </div>
+            <div class="rsam-stat-item">
+                <strong>Total Discounts</strong>
+                <span>${formatPrice(summary.total_discount)}</span>
+            </div>
+        </div>
+        
+        <hr>
+        <h5>Top Selling Products (by Revenue)</h5>
+        `;
+
+		// (Top Products) (Table)
+		if (data.top_products && data.top_products.length > 0) {
+			html += `<table class="rsam-list-table"><thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>Total Quantity Sold</th>
+                    <th>Total Revenue</th>
+                </tr>
+            </thead><tbody>`;
+			data.top_products.forEach((prod) => {
+				html += `<tr>
+                    <td>${escapeHtml(prod.name)}</td>
+                    <td>${escapeHtml(prod.total_quantity)} ${escapeHtml(
+					prod.unit_type
+				)}</td>
+                    <td>${formatPrice(prod.total_revenue)}</td>
+                </tr>`;
+			});
+			html += `</tbody></table>`;
+		} else {
+			html += `<p>No sales data found for this period.</p>`;
+		}
+		return html;
+	}
+
+	/**
+	 * (Expenses Summary) (Report) (HTML)
+	 */
+	function renderExpensesReport(summary) {
+		let html = `<h4>${rsamData.strings.expenseBreakdown || 'Expense Breakdown'}</h4>
+        <div class_rsam-summary-row rsam-summary-total">
+            <strong>Total Expenses: ${formatPrice(
+				summary.total_expenses
+			)}</strong>
+        </div>
+        <hr>
+        `;
+
+		// (Expenses) (Table)
+		if (
+			summary.expense_breakdown &&
+			summary.expense_breakdown.length > 0
+		) {
+			html += `<table class="rsam-list-table"><thead>
+                <tr>
+                    <th>Expense Category</th>
+                    <th>Total Amount</th>
+                </tr>
+            </thead><tbody>`;
+			summary.expense_breakdown.forEach((exp) => {
+				html += `<tr>
+                    <td>${escapeHtml(exp.category)}</td>
+                    <td>${formatPrice(exp.total)}</td>
+                </tr>`;
+			});
+			html += `</tbody></table>`;
+		} else {
+			html += `<p>No expenses found for this period.</p>`;
+		}
+		return html;
+	}
+
+	/**
+	 * (Stock Valuation) (Report) (HTML)
+	 */
+	function renderStockReport(summary) {
+		// (Yeh (report) (date-independent) hai)
+		let html = `<h4>${rsamData.strings.inventoryValuation || 'Inventory Valuation Report'} (Real-Time)</h4>
+        <div class="rsam-summary-row rsam-summary-total">
+            <strong>Total Stock Value (at Cost): ${formatPrice(
+				summary.total_stock_value
+			)}</strong>
+        </div>
+        <hr>
+        <h5>Stock Value by Category</h5>
+        `;
+
+		// (Category Value) (Table)
+		if (summary.value_by_category && summary.value_by_category.length > 0) {
+			html += `<table class="rsam-list-table"><thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Total Cost Value</th>
+                </tr>
+            </thead><tbody>`;
+			summary.value_by_category.forEach((cat) => {
+				html += `<tr>
+                    <td>${escapeHtml(
+						cat.category || 'Uncategorized'
+					)}</td>
+                    <td>${formatPrice(cat.total_cost_value)}</td>
+                </tr>`;
+			});
+			html += `</tbody></table>`;
+		} else {
+			html += `<p>No stock found.</p>`;
+		}
+
+		html += `<hr><h5>Low Stock Items</h5>`;
+		// (Low Stock) (Table)
+		if (
+			summary.low_stock_products &&
+			summary.low_stock_products.length > 0
+		) {
+			html += `<table class="rsam-list-table"><thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Current Stock</th>
+                    <th>Threshold</th>
+                </tr>
+            </thead><tbody>`;
+			summary.low_stock_products.forEach((prod) => {
+				html += `<tr>
+                    <td>${escapeHtml(prod.name)}</td>
+                    <td>${escapeHtml(prod.stock_quantity)}</td>
+                    <td>${escapeHtml(prod.low_stock_threshold)}</td>
+                </tr>`;
+			});
+			html += `</tbody></table>`;
+		} else {
+			html += `<p>No items are currently low on stock.</p>`;
+		}
+		return html;
+	}
+
+	/**
+	 * (Customer Ledger) (Report) (HTML)
+	 */
+	function renderCustomerLedger(ledger) {
+		const customer = ledger.customer;
+		let html = `<h4>${rsamData.strings.customerLedger || 'Customer Ledger (Khata)'}</h4>
+        <h5>Customer: ${escapeHtml(customer.name)} (${escapeHtml(
+			customer.phone
+		)})</h5>
+        <div class_rsam-summary-row rsam-summary-total">
+            <strong>Current Dues (Balance): ${formatPrice(
+				customer.credit_balance
+			)}</strong>
+        </div>
+        <hr>
+        <h5>Transaction History (Selected Period)</h5>
+        `;
+
+		// (Ledger Entries) (Table)
+		if (ledger.entries && ledger.entries.length > 0) {
+			html += `<table class="rsam-list-table"><thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Transaction Type</th>
+                    <th>Details</th>
+                    <th>Debit (Dues Added)</th>
+                    <th>Credit (Payment Received)</th>
+                </tr>
+            </thead><tbody>`;
+
+			ledger.entries.forEach((entry) => {
+				html += `<tr>
+                    <td>${escapeHtml(
+						new Date(entry.date).toLocaleDateString()
+					)}</td>
+                    <td>${escapeHtml(entry.type)}</td>
+                    <td>${
+						entry.type === 'Sale'
+							? `Sale ID #${entry.id}`
+							: escapeHtml(entry.notes)
+					}</td>
+                    <td class="rsam-price-negative">${
+						parseFloat(entry.debit) > 0
+							? formatPrice(entry.debit)
+							: '-'
+					}</td>
+                    <td class="rsam-price-positive">${
+						parseFloat(entry.credit) > 0
+							? formatPrice(entry.credit)
+							: '-'
+					}</td>
+                </tr>`;
+			});
+			html += `</tbody></table>`;
+		} else {
+			html += `<p>No transactions found for this customer in this period.</p>`;
+		}
+		return html;
+	}
+
+	/** Part 10 — Yahan khatam hua */
 		
-
+		
+		
+	/** Part 1 — Yahan khatam hua */
 })(); // (IIFE) (close)
