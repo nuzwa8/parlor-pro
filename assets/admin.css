@@ -1,0 +1,348 @@
+/**
+ * Parlor Pro — Admin Styles
+ * Namespace: .ssm
+ * (Glassmorphism + Gradients + Responsive Layout)
+ */
+
+/* ------------------------------
+   Design Tokens
+--------------------------------*/
+:root {
+  --ssm-primary: #7a3cff;
+  --ssm-cyan: #00d4ff;
+  --ssm-coral: #ff6b6b;
+  --ssm-bg: #f8fafc;
+  --ssm-text: #0f172a;
+  --ssm-muted: #64748b;
+  --ssm-radius: 1rem;
+  --ssm-gap: 1rem;
+  --ssm-grad-1: linear-gradient(135deg,#7A3CFF 0%,#00D4FF 100%);
+  --ssm-grad-2: linear-gradient(135deg,#FF6B6B 0%,#FFC46B 100%);
+  --ssm-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+
+/* ------------------------------
+   Base Elements
+--------------------------------*/
+.ssm {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--ssm-text);
+  box-sizing: border-box;
+}
+
+.ssm * {
+  box-sizing: inherit;
+}
+
+.ssm h1, .ssm h2, .ssm h3, .ssm h4 {
+  color: var(--ssm-text);
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.ssm .muted {
+  color: var(--ssm-muted);
+  font-size: 0.9em;
+}
+
+/* ------------------------------
+   Layouts
+--------------------------------*/
+.ssm.wrap, .ssm-root {
+  display: block;
+  background: var(--ssm-bg);
+  padding: var(--ssm-gap);
+}
+
+.ssm.grid {
+  display: grid;
+  gap: var(--ssm-gap);
+}
+
+.ssm.grid.two {
+  grid-template-columns: repeat(auto-fit,minmax(300px,1fr));
+}
+
+.ssm.grid.kpis {
+  grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+}
+
+/* ------------------------------
+   Header Bars
+--------------------------------*/
+.ssm.header {
+  padding: 1rem 1.5rem;
+  border-radius: var(--ssm-radius);
+  color: #fff;
+  box-shadow: var(--ssm-shadow);
+  margin-bottom: var(--ssm-gap);
+}
+
+.ssm.header.gradient-1 {
+  background: var(--ssm-grad-1);
+}
+
+.ssm.header.gradient-2 {
+  background: var(--ssm-grad-2);
+}
+
+.ssm.header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.ssm.header .sub {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+/* ------------------------------
+   Panels + Cards
+--------------------------------*/
+.ssm.panel, .ssm.card {
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(8px);
+  border-radius: var(--ssm-radius);
+  box-shadow: var(--ssm-shadow);
+  padding: 1rem 1.2rem;
+}
+
+.ssm.panel h3 {
+  margin-top: 0;
+}
+
+.ssm.card.kpi {
+  text-align: center;
+  padding: 1.2rem;
+}
+
+.ssm.card.kpi .kpi-label {
+  font-size: 0.9rem;
+  color: var(--ssm-muted);
+  margin-bottom: 0.3rem;
+}
+
+.ssm.card.kpi .kpi-value {
+  font-size: 1.6rem;
+  font-weight: bold;
+}
+
+.ssm.card.kpi-primary { border-top: 4px solid var(--ssm-primary); }
+.ssm.card.kpi-cyan { border-top: 4px solid var(--ssm-cyan); }
+.ssm.card.kpi-coral { border-top: 4px solid var(--ssm-coral); }
+
+/* ------------------------------
+   Tables
+--------------------------------*/
+.ssm.table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: var(--ssm-radius);
+  overflow: hidden;
+  background: #fff;
+}
+
+.ssm.table th, .ssm.table td {
+  padding: 0.6rem 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ssm.table.zebra tbody tr:nth-child(even) {
+  background: #f9fafb;
+}
+
+.ssm.table tbody tr:hover {
+  background: #f0f9ff;
+}
+
+/* ------------------------------
+   Pager
+--------------------------------*/
+.ssm.pager {
+  margin-top: 0.5rem;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ssm.pager .btn {
+  background: var(--ssm-primary);
+  color: #fff;
+  border: none;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.ssm.pager .btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ------------------------------
+   Forms
+--------------------------------*/
+.ssm.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.ssm.form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+}
+
+.ssm.form input,
+.ssm.form select,
+.ssm.form textarea {
+  padding: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: var(--ssm-radius);
+  font-size: 0.95rem;
+}
+
+.ssm.form input:focus,
+.ssm.form select:focus,
+.ssm.form textarea:focus {
+  outline: 2px solid var(--ssm-primary);
+  outline-offset: 1px;
+}
+
+.ssm.form .actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ssm.form .form-note {
+  font-size: 0.85rem;
+  color: var(--ssm-muted);
+}
+
+/* ------------------------------
+   Buttons
+--------------------------------*/
+.button.ssm {
+  background: var(--ssm-primary);
+  color: #fff !important;
+  border: none;
+  border-radius: var(--ssm-radius);
+  padding: 0.5rem 1rem;
+  transition: background 0.2s;
+}
+
+.button.ssm:hover {
+  background: #6430d9;
+}
+
+.button.ssm.pill {
+  border-radius: 999px;
+  margin: 0.25rem;
+}
+
+/* ------------------------------
+   POS Layout
+--------------------------------*/
+.ssm.keypad {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.ssm.total-bar {
+  font-size: 1.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0;
+  padding: 0.8rem;
+  background: var(--ssm-grad-1);
+  color: #fff;
+  border-radius: var(--ssm-radius);
+}
+
+/* ------------------------------
+   Alerts
+--------------------------------*/
+.ssm.alert {
+  padding: 1rem;
+  border-radius: var(--ssm-radius);
+  margin: 1rem 0;
+  background: #fff0f0;
+  border-left: 5px solid var(--ssm-coral);
+}
+
+.ssm.alert.error {
+  background: #fff0f0;
+  border-left-color: var(--ssm-coral);
+}
+
+/* ------------------------------
+   Loader
+--------------------------------*/
+#ssm-loader {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(4px);
+  background: rgba(255,255,255,0.5);
+  z-index: 9999;
+}
+
+#ssm-loader.on {
+  display: flex;
+}
+
+.ssm-spinner {
+  width: 32px;
+  height: 32px;
+  border: 4px solid rgba(0,0,0,0.1);
+  border-top: 4px solid var(--ssm-primary);
+  border-radius: 50%;
+  animation: ssm-spin 0.8s linear infinite;
+}
+
+@keyframes ssm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ssm-loader-text {
+  margin-left: 0.8rem;
+  font-weight: 500;
+  color: var(--ssm-text);
+}
+
+/* ------------------------------
+   Responsive
+--------------------------------*/
+@media (max-width: 768px) {
+  .ssm.grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .ssm.table th, .ssm.table td {
+    font-size: 0.85rem;
+    padding: 0.4rem;
+  }
+
+  .ssm.header h2 {
+    font-size: 1.2rem;
+  }
+}
+
+/* ------------------------------
+   Focus Visible
+--------------------------------*/
+:focus-visible {
+  outline: 2px solid var(--ssm-cyan);
+  outline-offset: 2px;
+}
