@@ -147,10 +147,7 @@
       .then(({ data }) => data || {})
       .then((d) => {
         const html = `
-          <div class="ssm header gradient-1">
-            <h2>Parlor Pro — Dashboard</h2>
-            <div class="sub">${escapeHtml(ssmData.siteUrl || '')}</div>
-          </div>
+          <div class="ssm header gradient-1"><h2>Parlor Pro — Dashboard</h2></div>
           <div class="ssm grid kpis">
             ${renderKpiCard('کل کسٹمرز', String(d.total_clients || 0), 'primary')}
             ${renderKpiCard('آج کی اپائنٹمنٹس', String(d.today_appts || 0), 'cyan')}
@@ -451,6 +448,56 @@
   // -----------------------------
   // Router (by page param)
   // -----------------------------
+  
+  function initServices() {
+    const $root = mountTemplate('ssm-services-root', 'سروسز');
+    if (!$root) return;
+    const panel = document.createElement('div');
+    panel.className = 'ssm card ssm-services-panel';
+    panel.innerHTML = '<div class="title">سروسز کی کیٹیگریز</div><div class="ssm-services-body"><div class="loader">لوڈ ہو رہا ہے…</div></div>';
+    $root.append(panel);
+
+    // Fetch catalog
+    const url = (window.ssmData && window.ssmData.ajaxUrl) ? window.ssmData.ajaxUrl : '';
+    const nonce = (window.ssmData && window.ssmData.nonce) || '';
+    if (!url) { panel.querySelector('.ssm-services-body').textContent = 'ajaxUrl نہیں ملا'; return; }
+    const params = new URLSearchParams({ action: 'pp_get_services_catalog', _wpnonce: nonce });
+
+    fetch(url + '?' + params.toString(), { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(payload => {
+        const body = panel.querySelector('.ssm-services-body');
+        if (!payload || !payload.success) { body.textContent = 'ڈیٹا حاصل نہیں ہو سکا۔'; return; }
+        const cat = payload.data.catalog || {};
+        const wrapper = document.createElement('div');
+        wrapper.className = 'ssm-services-grid';
+        Object.keys(cat).forEach(key => {
+          const c = cat[key] || {};
+          const card = document.createElement('div');
+          card.className = 'ssm service-cat';
+          const h = document.createElement('h4');
+          h.textContent = c.title || key;
+          card.appendChild(h);
+          const ul = document.createElement('ul');
+          (c.items || []).forEach(it => {
+            const li = document.createElement('li');
+            li.innerHTML = '<span class="n"></span><code class="cd"></code>';
+            li.querySelector('.n').textContent = it.name || '';
+            li.querySelector('.cd').textContent = it.code || '';
+            ul.appendChild(li);
+          });
+          card.appendChild(ul);
+          wrapper.appendChild(card);
+        });
+        body.innerHTML = '';
+        body.appendChild(wrapper);
+      })
+      .catch(() => {
+        const body = panel.querySelector('.ssm-services-body');
+        body.textContent = 'کچھ خرابی پیش آگئی۔';
+      });
+  }
+
   function route() {
     const page = getQueryParam('page') || '';
     if (page === 'parlor-pro' || page === '') {
@@ -461,7 +508,7 @@
       initPOS();
     } else if (page === 'parlor-pro-reports') {
       initReports();
-    } else if (page === 'parlor-pro-settings') {
+    } else if (page === 'parlor-pro-services') { initServices(); } else if (page === 'parlor-pro-settings') {
       initSettings();
     } else {
       // Unknown page — no-op
