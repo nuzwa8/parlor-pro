@@ -549,35 +549,34 @@
 })();
 
 
-
-                /* Additive: Services screen styles */
-.ssm-services-panel .title {
+/* Fixed: Services styles scoped safely */
+#ssm-services-root .ssm-services-panel .title {
   font-weight: 700;
   margin-bottom: 8px;
 }
-.ssm-services-grid {
+#ssm-services-root .ssm-services-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
 }
-.ssm.service-cat {
+#ssm-services-root .ssm.service-cat {
   background: rgba(255, 255, 255, 0.8);
   padding: 12px;
   border-radius: 14px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
 }
-.ssm.service-cat h4 {
+#ssm-services-root .ssm.service-cat h4 {
   margin: 0 0 8px;
   font-size: 1rem;
 }
-.ssm.service-cat ul {
+#ssm-services-root .ssm.service-cat ul {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: 6px;
 }
-.ssm.service-cat li {
+#ssm-services-root .ssm.service-cat li {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -585,8 +584,9 @@
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.03);
 }
-.ssm.service-cat li .cd {
+#ssm-services-root .ssm.service-cat li .cd {
   opacity: .7;
   font-size: .8rem;
 }
+
 
