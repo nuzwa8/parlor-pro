@@ -1,1 +1,85 @@
+/** Part 7 — Dashboard Grid Layout and KPI Card Styling */
 
+/* 🟢 یہاں سے Dashboard CSS شروع ہو رہا ہے */
+.ssm-dashboard-grid {
+    /* لے آؤٹ امیج کے مطابق 4-کالم گرڈ سیٹ اپ */
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--ssm-space-md);
+    margin-bottom: var(--ssm-space-lg);
+}
+
+.ssm-dashboard-grid > .ssm-panel {
+    /* Compliance اور Chart پینل کو دو کالم پر پھیلاؤ */
+    grid-column: span 2;
+}
+
+/* اگر سکرین چھوٹی ہو تو Responsive View */
+@media (max-width: 1200px) {
+    .ssm-dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .ssm-dashboard-grid > .ssm-panel {
+        grid-column: span 2; /* چھوٹی سکرین پر پینل مکمل چوڑائی لیں گے */
+    }
+}
+@media (max-width: 768px) {
+    .ssm-dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* KPI Card Styling (لے آؤٹ IMG_2969 کے مطابق) */
+.ssm-kpi-card {
+    background-color: var(--ssm-color-light);
+    border: 1px solid #e1e1e1;
+    border-radius: var(--ssm-border-radius);
+    padding: var(--ssm-space-md);
+    text-align: center;
+}
+
+.ssm-kpi-card h3 {
+    font-size: 0.9em;
+    color: #666;
+    margin: 0 0 var(--ssm-space-sm) 0;
+}
+
+.ssm-kpi-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: var(--ssm-color-dark);
+    margin: 0;
+}
+
+.ssm-kpi-detail {
+    font-size: 0.8em;
+    color: var(--ssm-color-success);
+    font-weight: 500;
+}
+
+.ssm-kpi-card.ssm-kpi-warning {
+    border-left: 5px solid var(--ssm-color-warning);
+}
+
+/* Compliance Panel Specific Styles */
+.ssm-panel ul {
+    list-style: none;
+    margin: 0 0 var(--ssm-space-md) 0;
+    padding: 0;
+}
+.ssm-panel ul li {
+    padding: var(--ssm-space-xs) 0;
+}
+.ssm-alerts-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px dotted #eee;
+    padding: var(--ssm-space-sm) 0;
+}
+.ssm-alerts-list li:last-child {
+    border-bottom: none;
+}
+/* 🔴 یہاں پر Dashboard CSS ختم ہو رہا ہے */
+/* ✅ Syntax verified block end. */
